@@ -1,70 +1,33 @@
-#include <vector>
-#include <unordered_map>
-#include <algorithm>
-#include <utility>
-#include <taskflow/taskflow.hpp>
+#include <iostream>
+#include <chrono>
+#include "taskflow/taskflow.hpp"
 
-// Helper function to print the content of an unordered map
-void PrintUnorderedMap(std::unordered_map<std::string, int> hash_map) {
-    std::cout << "Printing unordered map: " << std::endl;
-    for (const auto& element : hash_map) {
-        std::cout << element.first << " " << element.second << std::endl;
-    }
-    std::cout << std::endl;
+// Define the function to be executed in parallel
+void task(int id) {
+  std::cout << "Task " << id << " is running on thread " << std::this_thread::get_id() << std::endl;
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
 }
 
-int main()
-{
-    // Setup the taskflow 
-    tf::Taskflow tf;
+int main() {
+  // Create a taskflow object
+  tf::Taskflow tf;
 
-    // Hash tables to combine
-    std::unordered_map<std::string, int> hash_table1{{"foo", 1}, {"bar", 2}, {"baz", 3}};
-    std::unordered_map<std::string, int> hash_table2{{"bar", 4}, {"baz", 5}, {"qux", 6}};
-    std::unordered_map<std::string, int> hash_table3{{"foo", 7}, {"baz", 8}, {"qux", 9}};
-    std::unordered_map<std::string, int> result_hash_table;
+  // Create the nodes of the DAG
+  auto node1 = tf.emplace([](){ task(1); }).name("Node 1");
+  auto node2 = tf.emplace([](){ task(2); }).name("Node 2");
+  auto node3 = tf.emplace([](){ task(3); }).name("Node 3");
+  auto node4 = tf.emplace([](){ task(4); }).name("Node 4");
+  auto node5 = tf.emplace([](){ task(5); }).name("Node 5");
 
-    // Print the hash tables
-    PrintUnorderedMap(hash_table1);
-    PrintUnorderedMap(hash_table2);
-    PrintUnorderedMap(hash_table3);
+  // Define the dependencies between the nodes
+  node1.precede(node2);
+  node2.precede(node3, node4);
+  node3.precede(node5);
+  node4.precede(node5);
 
-    // Create the tasks
-    auto task1 = tf.emplace([&]() {
-        // Combine the first two hash tables
-        for (const auto& element : hash_table2) {
-            if (hash_table1.find(element.first) != hash_table1.end()) {
-                result_hash_table[element.first] = hash_table1[element.first] + element.second;
-            }
-            else {
-                result_hash_table[element.first] = element.second;
-            }
-        }
-    });
+  // Execute the DAG in parallel
+  tf::Executor executor;
+  executor.run(tf).wait();
 
-    auto task2 = tf.emplace([&]() {
-        // Combine the third hash table
-        for (const auto& element : hash_table3) {
-            if (result_hash_table.find(element.first) != result_hash_table.end()) {
-                result_hash_table[element.first] += element.second;
-            }
-            else {
-                result_hash_table[element.first] = element.second;
-            }
-        }
-    });
-
-    // Connect the tasks
-    task1.precede(task2);
-
-    // Create a taskflow executor
-    tf::Executor executor;
-
-    // Execute the taskflow
-    executor.run(tf).get();
-
-    // Print the result
-    PrintUnorderedMap(result_hash_table);
-
-    return 0;
+  return 0;
 }
